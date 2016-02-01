@@ -36,6 +36,36 @@ See [Class Reference](http://docs.ros.org/indigo/api/moveit_topp/html/)
 
 ## Usage
 
+### Demo: Convert Piecewise Polynomial Trajectory to Time-Optimal Discretized Path
+
+- Use the Matlab script ``scripts/convert_waypoints_to_poly.m`` to generate ``data/matlab_pp_traj.csv``
+- Optimizes the file in C++ using TOPP via:
+
+        rosrun moveit_topp moveit_topp_test_pp_to_optimal
+
+- This generates ``data/topp_optimized_traj.csv``
+- View the generated discretized waypoints:
+
+        matlab scripts/display_TOPP_traj.m
+
+### Demo: Convert Joint Trajectory Waypoints into Piecewise Polynomial Trajectory
+
+- Generate a joint-space waypoints trajectory using MoveIt! and save into ``data/matlab_traj.csv``
+- Convert the file into piecewise polynomials in C++ using via:
+
+        rosrun moveit_topp moveit_topp_test_joint_traj_to_pp
+
+- This generates ``data/spline_pp_traj.csv``
+- View the generated PP spline in Matlab:
+
+        matlab scripts/display_PP.m
+
+### Demo: Convert Joint Trajectory Waypoints into Time-Optimal Discretized Path
+
+
+
+## Demo: Convert MoveIt RobotTrajectory into Time-Optimal Path
+
 TODO
 
 ## Testing and Linting

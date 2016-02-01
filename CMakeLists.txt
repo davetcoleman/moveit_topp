@@ -9,6 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   roslint
   rosparam_shortcuts
   cmake_modules
+  moveit_msgs
 )
 
 find_package(Eigen REQUIRED)
@@ -34,6 +35,7 @@ catkin_package(
 include_directories(
   include
   external/TOPP/src/
+  external/spline/
   ${catkin_INCLUDE_DIRS}
   ${EIGEN_INCLUDE_DIRS}
 )
@@ -57,15 +59,40 @@ file(COPY ${topp_LOCATION}
 )
 
 # --------------------------------------------
-
-# Library
-add_executable(${PROJECT_NAME}_wrapper
-  src/moveit_topp.cpp
+# Spline Library
+add_library(${PROJECT_NAME}_spline
+  external/spline/spline.cpp
 )
-target_link_libraries(${PROJECT_NAME}_wrapper
+# target_link_libraries(${PROJECT_NAME}_spline
+# )
+# --------------------------------------------
+
+# Demo: Convert Piecewise Polynomial Trajectory to Time-Optimal Discretized Path
+add_executable(${PROJECT_NAME}_test_pp_to_optimal
+  src/test_pp_to_optimal.cpp
+)
+target_link_libraries(${PROJECT_NAME}_test_pp_to_optimal
   ${PROJECT_NAME}
   ${catkin_LIBRARIES}
-  ${Boost_LIBRARIES}
+)
+
+# Demo: Convert Joint Trajectory Waypoints into Piecewise Polynomial Trajectory
+add_executable(${PROJECT_NAME}_test_joint_traj_to_pp
+  src/test_joint_traj_to_pp.cpp
+)
+target_link_libraries(${PROJECT_NAME}_test_joint_traj_to_pp
+  ${PROJECT_NAME}_spline
+  ${catkin_LIBRARIES}
+)
+
+# Demo: Convert Joint Trajectory Waypoints into Time-Optimal Discretized Path
+add_executable(${PROJECT_NAME}_test_joint_traj_to_time_optimal
+  src/test_joint_traj_to_time_optimal.cpp
+)
+target_link_libraries(${PROJECT_NAME}_test_joint_traj_to_time_optimal
+  ${PROJECT_NAME}
+  ${PROJECT_NAME}_spline
+  ${catkin_LIBRARIES}
 )
 
 #############

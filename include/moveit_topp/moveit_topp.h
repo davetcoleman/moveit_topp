@@ -56,6 +56,12 @@
 #include "TorqueLimits.h"
 #include "PolygonConstraints.h"
 
+// Spline
+#include "spline.hpp"
+
+// MoveIt
+#include <moveit_msgs/RobotTrajectory.h>
+
 namespace moveit_topp
 {
 
@@ -67,22 +73,41 @@ public:
    * \brief Constructor
    */
   MoveItTopp()
-    : name_("moveit_topp")
   {
     // Load rosparams
-    ros::NodeHandle rpnh(nh_, name_);
-    std::size_t error = 0;
+    //ros::NodeHandle rpnh(nh_, name_);
+    //std::size_t error = 0;
     //error += !rosparam_shortcuts::get(name_, rpnh, "control_rate", control_rate_);
     // add more parameters here to load if desired
-    rosparam_shortcuts::shutdownIfError(name_, error);
+    //rosparam_shortcuts::shutdownIfError(name_, error);
+    ROS_INFO_STREAM_NAMED(name_,"MoveItTopp Ready.");
+  }
+
+  void readPPTrajFromFile(const std::string& filename, TOPP::Trajectory &trajectory)
+  {
+    ROS_INFO_STREAM_NAMED(name_, "Reading PP from filename: " << filename);
 
     std::string trajectory_string;
-    readTrajectoryFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/external/TOPP/tests/matlab_traj.csv",
-                           trajectory_string);
+    std::ifstream filehandle(filename.c_str());
 
-    // Load trajectory
-    TOPP::Trajectory* ptrajectory = new TOPP::Trajectory(trajectory_string);
+    filehandle.seekg(0, std::ios::end);
+    trajectory_string.reserve(filehandle.tellg());
+    filehandle.seekg(0, std::ios::beg);
 
+    trajectory_string.assign((std::istreambuf_iterator<char>(filehandle)),
+                  std::istreambuf_iterator<char>());
+
+    // Convert to trajectory
+    trajectory.InitFromString(trajectory_string);
+  }
+
+  void optimizeTrajectory(const TOPP::Trajectory &old_trajectory, TOPP::Trajectory &new_trajectory)
+  {
+    ROS_INFO_STREAM_NAMED(name_, "Optimizing tractory with " << old_trajectory.dimension << " dims, "
+                          << old_trajectory.chunkslist.size() << " waypoints");
+    //moveit_msgs::RobotTrajectory &trajectory_msg;
+
+    // Config TODO(davetcoleman): do not hard code
     std::size_t num_joints = 7;
     double discrtimestep = 0.005;
     double max_velocity = 2;
@@ -104,83 +129,49 @@ public:
 
     // Setup constraints
     pconstraints_.reset(new TOPP::KinematicLimits(constraint_string));
-    pconstraints_->trajectory = *ptrajectory;
-
-    // Set default public tuning parameters
-    integrationtimestep = 0;
-    reparamtimestep = 0;
-    passswitchpointnsteps = 5;
-    extrareps = 0;
+    pconstraints_->trajectory = old_trajectory;
 
     // Set default private tuning parameters
     pconstraints_->bisectionprecision = 0.01;
     pconstraints_->loweringcoef = 0.95;
 
     // Run TOPP
+    ROS_INFO_STREAM_NAMED(name_, "Computing profiles");
     RunComputeProfiles(0, 0);
-    ReparameterizeTrajectory();
+
+    // Reparameterize
+    ROS_INFO_STREAM_NAMED(name_, "Parameterizing");
+    pconstraints_->reparamtimestep = 0;
+    pconstraints_->trajectory.Reparameterize(*pconstraints_, new_trajectory);
 
     // Get results
     //WriteResultTrajectory();
     //std::cout << "new_trajectory_string_: " << new_trajectory_string_ << std::endl;
-
-    // Write discretized trajectory to file
-    writeTrajectoryToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/external/TOPP/tests/matlab_traj_output.csv");
-
-    ROS_INFO_STREAM_NAMED(name_,"MoveItTopp Ready.");
   }
 
-  void readTrajectoryFromFile(const std::string& filename, std::string& output)
+  bool writeTrajectoryToFile(const std::string &file_path, const TOPP::Trajectory &trajectory)
   {
-    std::cout << "filename " << filename << std::endl;
-    std::ifstream filehandle(filename.c_str());
+    ROS_INFO_STREAM_NAMED(name_, "Writing discretized trajectory to file");
 
-    filehandle.seekg(0, std::ios::end);
-    output.reserve(filehandle.tellg());
-    filehandle.seekg(0, std::ios::beg);
-
-    output.assign((std::istreambuf_iterator<char>(filehandle)),
-                  std::istreambuf_iterator<char>());
-  }
-
-  bool writeTrajectoryToFile(const std::string &file_path)
-  {
     std::ofstream output_handle;
     output_handle.open(file_path.c_str());
 
     // Output header -------------------------------------------------------
-    output_handle << "time_from_start,j0,j1,j2,j3,j4,j5,j6";
-    output_handle << std::endl;
+    output_handle << "time_from_start,j0,j1,j2,j3,j4,j5,j6" << std::endl;
 
     // Debug
-    ROS_INFO_STREAM_NAMED(name_, "Number of chunks: " << "size: " << new_trajectory_.chunkslist.size());
+    ROS_INFO_STREAM_NAMED(name_, " - Number of waypoints: " << trajectory.chunkslist.size());
+    ROS_INFO_STREAM_NAMED(name_, " - Trajectory duration: " << trajectory.duration);
 
     // Discretize back into waypoints
     double dt = 0.01;
 
-    /*
-    double time = 0;
-    std::list<TOPP::Chunk>::iterator itchunk = new_trajectory_.chunkslist.begin();
-    for(;itchunk != new_trajectory_.chunkslist.end(); itchunk++)
-    {
-      output_handle.precision(10);
-      output_handle << time << ",";
-      for (std::size_t j = 0; j < itchunk->polynomialsvector.size(); ++j) // polynomial ~= dimension
-      {
-        // TODO(davetcoleman): for duration of chunk
-        double value = itchunk->polynomialsvector[j].Eval(time);
-        output_handle << value << ", ";
-      }
-      time += dt;
-      output_handle << std::endl;
-    }
-    */
     std::vector<double> output;
-    output.resize(new_trajectory_.dimension);
+    output.resize(trajectory.dimension);
 
-    for (double time = 0; time < new_trajectory_.duration; time+=dt)
+    for (double time = 0; time < trajectory.duration; time+=dt)
     {
-      new_trajectory_.Eval(time, output);
+      trajectory.Eval(time, output);
 
       output_handle.precision(10);
       output_handle << time << ",";
@@ -193,71 +184,47 @@ public:
 
 
     output_handle.close();
-    ROS_INFO_STREAM_NAMED(name_, "Saved trajectory to file " << file_path);
+    ROS_INFO_STREAM_NAMED(name_, "Saved trajectory to " << file_path);
     return true;
   }
 
   int RunComputeProfiles(TOPP::dReal sdbeg, TOPP::dReal sdend){
     // Set tuning parameters
-    pconstraints_->integrationtimestep = integrationtimestep;
-    pconstraints_->passswitchpointnsteps = passswitchpointnsteps;
-    pconstraints_->extrareps = extrareps;
+    pconstraints_->integrationtimestep = 0;
+    pconstraints_->passswitchpointnsteps = 5;
+    pconstraints_->extrareps = 0;
     pconstraints_->stepthresh = 0.01;
 
-    int res = TOPP::ComputeProfiles(*pconstraints_,sdbeg,sdend);
-    resduration = pconstraints_->resduration;
+    int res = TOPP::ComputeProfiles(*pconstraints_, sdbeg, sdend);
     return res;
   }
 
-  int ReparameterizeTrajectory(TOPP::dReal reparamtimestep=0)
-  {
-    // Set tuning parameters
-    pconstraints_->reparamtimestep = reparamtimestep;
-
-    int ret = pconstraints_->trajectory.Reparameterize(*pconstraints_, new_trajectory_);
-    return ret;
-  }
-
-  void WriteResultTrajectory(){
+  //void WriteResultTrajectory(TOPP::Trajectory &trajectory){
     // TODO(davetcoleman): remove - i don't think i need this
 
     // std::stringstream ss; ss << std::setprecision(std::numeric_limits<OpenRAVE::dReal>::digits10+1);
     //std::stringstream ss; ss << std::setprecision(std::numeric_limits<OpenRAVE::dReal>::digits10+1);
     // printf("WriteResultTrajectory: %d %f %d blah\n",
-    //        new_trajectory_.dimension, new_trajectory_.duration,
-    //        new_trajectory_.degree);
-    std::stringstream ss;
-    ss << std::setprecision(17);
-    new_trajectory_.Write(ss);
-    new_trajectory_string_ = ss.str();
-  }
+    //        trajectory.dimension, trajectory.duration,
+    //        trajectory.degree);
+  //   std::stringstream ss;
+  //   ss << std::setprecision(17);
+  //   trajectory.Write(ss);
+  //   trajectorystring_ = ss.str();
+  // }
 
 private:
 
   // --------------------------------------------------------
 
   // The short name of this class
-  std::string name_;
+  std::string name_ = "moveit_topp";
 
   // A shared node handle
   ros::NodeHandle nh_;
 
   // TOPP vars
   boost::shared_ptr<TOPP::Constraints> pconstraints_;
-
-  TOPP::Trajectory new_trajectory_;
-  std::string new_trajectory_string_;
-
-  int ntangenttreated;
-  int nsingulartreated;
-  TOPP::dReal resduration;
-  TOPP::dReal sdendmin, sdendmax;
-  TOPP::dReal sdbegmin, sdbegmax;
-
-  // Tuning parameters
-  TOPP::dReal integrationtimestep, reparamtimestep;
-  int passswitchpointnsteps, extrareps;
-
 }; // end class
 
 // Create boost pointers for this class
@@ -265,25 +232,5 @@ typedef boost::shared_ptr<MoveItTopp> MoveItToppPtr;
 typedef boost::shared_ptr<const MoveItTopp> MoveItToppConstPtr;
 
 } // namespace moveit_topp
-
-int main(int argc, char** argv)
-{
-  // Initialize ROS
-  ros::init(argc, argv, "moveit_topp");
-  ROS_INFO_STREAM_NAMED("main", "Starting MoveItTopp...");
-
-  // Allow the action server to recieve and send ros messages
-  ros::AsyncSpinner spinner(2);
-  spinner.start();
-
-  // Initialize main class
-  moveit_topp::MoveItTopp server;
-
-  // Shutdown
-  ROS_INFO_STREAM_NAMED("main", "Shutting down.");
-  ros::shutdown();
-
-  return 0;
-}
 
 #endif  // MOVEIT_TOPP_MOVEIT_TOPP_H

@@ -33,7 +33,7 @@
  *********************************************************************/
 
 /* Author: Dave Coleman
-   Desc:   Test for time optimal path parameterization
+   Desc:   Test for converting a discretized joint trajectory into piecewise polynomials using splines
 */
 
 // ROS
@@ -43,32 +43,29 @@
 #include <rosparam_shortcuts/rosparam_shortcuts.h>
 
 // this package
-#include <moveit_topp/moveit_topp.h>
+#include <moveit_topp/spline_fitting.h>
 
 int main(int argc, char** argv)
 {
   // Initialize ROS
-  ros::init(argc, argv, "test_pp_to_optimal");
-  ROS_INFO_STREAM_NAMED("main", "Starting MoveItTopp test...");
+  ros::init(argc, argv, "demo_joint_traj_to_pp");
+  ROS_INFO_STREAM_NAMED("main", "Starting MoveItTopp demo...");
 
   // Allow the action server to recieve and send ros messages
   ros::AsyncSpinner spinner(2);
   spinner.start();
 
   // Initialize main class
-  moveit_topp::MoveItTopp optimizer;
+  moveit_topp::SplineFitting converter;
 
   // Load pre-generated (from Matlab) piecewise polynomial from file
-  TOPP::Trajectory orig_trajectory;
-  optimizer.readPPTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/matlab_pp_traj.csv", orig_trajectory);
+  converter.readJointTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv");
 
-  // Time-Optimize with respect to constraints
-  TOPP::Trajectory new_trajectory;
-  optimizer.optimizeTrajectory(orig_trajectory, new_trajectory);
+  // Fit a spline to waypoints
+  converter.fitSpline();
 
-  // Write joint trajectory to CSV file (for use with Matlab)
-  optimizer.writeTrajectoryToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv",
-                                  new_trajectory);
+  // Write coefficients to file (for use with Matlab)
+  converter.writeCoefficientsToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/spline_pp_traj.csv");
 
   // Shutdown
   ROS_INFO_STREAM_NAMED("main", "Finished.");

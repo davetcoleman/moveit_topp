@@ -68,28 +68,37 @@ add_library(${PROJECT_NAME}_spline
 # --------------------------------------------
 
 # Demo: Convert Piecewise Polynomial Trajectory to Time-Optimal Discretized Path
-add_executable(${PROJECT_NAME}_test_pp_to_optimal
-  src/test_pp_to_optimal.cpp
+add_executable(${PROJECT_NAME}_demo_pp_to_optimal
+  src/demo_pp_to_optimal.cpp
 )
-target_link_libraries(${PROJECT_NAME}_test_pp_to_optimal
+set_target_properties(${PROJECT_NAME}_demo_pp_to_optimal
+  PROPERTIES OUTPUT_NAME demo_pp_to_optimal PREFIX ""
+)
+target_link_libraries(${PROJECT_NAME}_demo_pp_to_optimal
   ${PROJECT_NAME}
   ${catkin_LIBRARIES}
 )
 
 # Demo: Convert Joint Trajectory Waypoints into Piecewise Polynomial Trajectory
-add_executable(${PROJECT_NAME}_test_joint_traj_to_pp
-  src/test_joint_traj_to_pp.cpp
+add_executable(${PROJECT_NAME}_demo_joint_traj_to_pp
+  src/demo_joint_traj_to_pp.cpp
 )
-target_link_libraries(${PROJECT_NAME}_test_joint_traj_to_pp
+set_target_properties(${PROJECT_NAME}_demo_joint_traj_to_pp
+  PROPERTIES OUTPUT_NAME demo_joint_traj_to_pp PREFIX ""
+)
+target_link_libraries(${PROJECT_NAME}_demo_joint_traj_to_pp
   ${PROJECT_NAME}_spline
   ${catkin_LIBRARIES}
 )
 
 # Demo: Convert Joint Trajectory Waypoints into Time-Optimal Discretized Path
-add_executable(${PROJECT_NAME}_test_joint_traj_to_time_optimal
-  src/test_joint_traj_to_time_optimal.cpp
+add_executable(${PROJECT_NAME}_demo_joint_traj_to_optimal
+  src/demo_joint_traj_to_optimal.cpp
 )
-target_link_libraries(${PROJECT_NAME}_test_joint_traj_to_time_optimal
+set_target_properties(${PROJECT_NAME}_demo_joint_traj_to_optimal
+  PROPERTIES OUTPUT_NAME demo_joint_traj_to_optimal PREFIX ""
+)
+target_link_libraries(${PROJECT_NAME}_demo_joint_traj_to_optimal
   ${PROJECT_NAME}
   ${PROJECT_NAME}_spline
   ${catkin_LIBRARIES}

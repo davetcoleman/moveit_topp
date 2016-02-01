@@ -44,28 +44,51 @@
 
 // this package
 #include <moveit_topp/spline_fitting.h>
+#include <moveit_topp/moveit_topp.h>
 
 int main(int argc, char** argv)
 {
   // Initialize ROS
-  ros::init(argc, argv, "test_joint_traj_to_pp");
-  ROS_INFO_STREAM_NAMED("main", "Starting MoveItTopp test...");
+  ros::init(argc, argv, "demo_joint_traj_to_optimal");
+  ROS_INFO_STREAM_NAMED("main", "Starting MoveItTopp demo...");
 
   // Allow the action server to recieve and send ros messages
   ros::AsyncSpinner spinner(2);
   spinner.start();
 
   // Initialize main class
-  moveit_topp::SplineFitting converter;
+  moveit_topp::SplineFitting spline_fitting;
 
   // Load pre-generated (from Matlab) piecewise polynomial from file
-  converter.readJointTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv");
+  spline_fitting.readJointTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv");
 
-  // Fit a spline to waypoints
-  converter.fitSpline();
+  // Fit a spline to waypoinst
+  spline_fitting.fitSpline();
+  return 0;
 
-  // Write coefficients to file (for use with Matlab)
-  converter.writeCoefficientsToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/spline_pp_traj.csv");
+  TOPP::Trajectory orig_trajectory;
+  spline_fitting.getPPTrajectory(orig_trajectory);
+
+  // Initialize optimizer
+  moveit_topp::MoveItTopp optimizer;
+
+  bool debug = true;
+  if (debug)
+  {
+    // Write PP trajectory to CSV file (for use with Matlab)
+    ROS_WARN_STREAM_NAMED("main", "converting orig trajectory to joint space");
+    optimizer.writeTrajectoryToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv",
+                                    orig_trajectory);
+    return 0;
+  }
+
+  // Time-Optimize with respect to constraints
+  TOPP::Trajectory new_trajectory;
+  optimizer.optimizeTrajectory(orig_trajectory, new_trajectory);
+
+  // Write joint trajectory to CSV file (for use with Matlab)
+  //optimizer.writeTrajectoryToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv",
+  //new_trajectory);
 
   // Shutdown
   ROS_INFO_STREAM_NAMED("main", "Finished.");

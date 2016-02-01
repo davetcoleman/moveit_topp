@@ -1,4 +1,4 @@
-function data = load_moveit_traj(filename, num_joints, time_offset)
+function data = load_moveit_traj(filename, num_joints)
 %
 % This function converts a CSV file from a MoveIt! trajectory into a Matlab
 % struct
@@ -6,7 +6,7 @@ function data = load_moveit_traj(filename, num_joints, time_offset)
     raw = csvread(filename,1,0);
     i=1;
     data.timestamp = raw(:,i);i=i+1;
-    data.timestamp = data.timestamp - data.timestamp(1) + time_offset;
+    data.timestamp = data.timestamp - data.timestamp(1);
 
     joints = [1:1:num_joints];
 

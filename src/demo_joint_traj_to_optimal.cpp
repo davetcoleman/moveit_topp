@@ -56,23 +56,25 @@ int main(int argc, char** argv)
   ros::AsyncSpinner spinner(2);
   spinner.start();
 
-  // Initialize main class
+  // Initialize interpolater
   moveit_topp::SplineFitting spline_fitting;
-
-  // Load pre-generated (from Matlab) piecewise polynomial from file
-  spline_fitting.readJointTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv");
-
-  // Fit a spline to waypoinst
-  spline_fitting.fitSpline();
-  return 0;
-
-  TOPP::Trajectory orig_trajectory;
-  spline_fitting.getPPTrajectory(orig_trajectory);
 
   // Initialize optimizer
   moveit_topp::MoveItTopp optimizer;
 
-  bool debug = true;
+  // Load pre-generated (from Matlab) piecewise polynomial from file
+  spline_fitting.readJointTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv");
+
+  // Benchmark runtime
+  ros::Time start_time = ros::Time::now();
+
+  // Fit a spline to waypoinst
+  spline_fitting.fitSpline();
+
+  TOPP::Trajectory orig_trajectory;
+  spline_fitting.getPPTrajectory(orig_trajectory);
+
+  bool debug = false;
   if (debug)
   {
     // Write PP trajectory to CSV file (for use with Matlab)
@@ -86,9 +88,13 @@ int main(int argc, char** argv)
   TOPP::Trajectory new_trajectory;
   optimizer.optimizeTrajectory(orig_trajectory, new_trajectory);
 
+  // Benchmark runtime
+  double duration = (ros::Time::now() - start_time).toSec();
+  ROS_INFO_STREAM_NAMED("main", "Total time: " << duration << " seconds (" << 1.0/duration << " hz)");
+
   // Write joint trajectory to CSV file (for use with Matlab)
-  //optimizer.writeTrajectoryToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv",
-  //new_trajectory);
+  optimizer.writeTrajectoryToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv",
+                                  new_trajectory);
 
   // Shutdown
   ROS_INFO_STREAM_NAMED("main", "Finished.");

@@ -140,42 +140,80 @@ public:
   {
     ROS_INFO_STREAM_NAMED(name_, "Fitting spline");
 
+    // Error check
     if (joint_positions_.empty())
     {
       ROS_ERROR_STREAM_NAMED(name_, "No data loaded to fit");
       return;
     }
-    // Error check
     if (timestamps_.size() != joint_positions_.front().size())
     {
-      ROS_ERROR_STREAM_NAMED(name_, "Data invalid");
+      ROS_ERROR_STREAM_NAMED(name_, "Data size invalid between timestamps and joint_positions");
       return;
     }
 
     // Get the velocities
-    calcSimpleDerivative();
+    bool use_simple_derivatie = false;
+    if (use_simple_derivatie)
+    {
+      calcSimpleDerivative();
+
+      // Error check
+      if (timestamps_.size() != joint_velocities_.front().size())
+      {
+        ROS_ERROR_STREAM_NAMED(name_, "Data size invalid between timestamps and joint_velocities");
+        return;
+      }
+    }
 
     // TODO(davetcoleman): process more than just joint 0
     std::size_t joint_id = 0;
 
-    int ndata = timestamps_.size();
+    int ndata = timestamps_.size(); // TODO(davetcoleman): is it ok to loose the final datapoint? it was removed b/c no derivative
     double* tdata = &timestamps_[0];
     double* ydata = &joint_positions_[joint_id][0];
-    double* ypdata = &joint_velocities_[joint_id][0];
+    double* ypdata;
+    if (use_simple_derivatie)
+      ypdata = &joint_velocities_[joint_id][0];
+    else
+      ypdata = new double[ndata];
 
+    // Benchmark runtime
+    ros::Time start_time = ros::Time::now();
+
+    // Set derivatives for a piecewise cubic Hermite interpolant.
+    ROS_INFO_STREAM_NAMED(name_, "Calculating spline pchip set");
+    spline_pchip_set( ndata, tdata, ydata, ypdata);
+
+    // Set up a piecewise cubic Hermite interpolant
+    ROS_INFO_STREAM_NAMED(name_, "Calculating spline hermite set");
     coefficients_ = spline_hermite_set(ndata, tdata, ydata, ypdata);
 
+    // Benchmark runtime
+    double duration = (ros::Time::now() - start_time).toSec();
+    ROS_INFO_STREAM_NAMED(name_,"Conversion to polynomial: " << duration << " seconds");
 
     // Output coefficients
-    std::cout << "Coefficients: " << std::endl;
-    for (std::size_t j = 0; j < std::size_t(ndata); ++j)
+    bool verbose = false;
+    if (verbose)
     {
-      for (std::size_t i = 0; i < 4; ++i)
+      std::cout << "Timestamp       Position        ";
+      if (use_simple_derivatie)
+        std::cout << "Velocity       ";
+      std::cout << "SVelocity        Coefficient1    Coefficient2    Coefficient3    Coefficient4 " << std::endl;
+      for (std::size_t j = 0; j < std::size_t(ndata); ++j)
       {
-        // TODO(davetcoleman): is this the right order??
-        std::cout << std::fixed << coefficients_[j*4 + i] << "\t";
+        std::cout << std::fixed << tdata[j] << "\t" << ydata[j] << "\t";
+        if (use_simple_derivatie)
+          std::cout << joint_velocities_[joint_id][j] << "\t";
+        std::cout << ypdata[j] << "\t";
+        for (std::size_t i = 0; i < 4; ++i)
+        {
+          // TODO(davetcoleman): is this the right order??
+          std::cout << coefficients_[j*4 + i] << "\t";
+        }
+        std::cout << std::endl;
       }
-      std::cout << std::endl;
     }
   }
 
@@ -210,6 +248,9 @@ public:
    */
   void getPPTrajectory(TOPP::Trajectory &trajectory)
   {
+    // Benchmark runtime
+    ros::Time start_time = ros::Time::now();
+
     ROS_INFO_STREAM_NAMED(name_, "Converting coefficients to new format");
 
     std::list<TOPP::Chunk> chunks_list;
@@ -233,6 +274,10 @@ public:
 
     // Create final trajectory
     trajectory.InitFromChunksList(chunks_list);
+
+    // Benchmark runtime
+    double duration = (ros::Time::now() - start_time).toSec();
+    ROS_INFO_STREAM_NAMED(name_,"Total time: " << duration << " seconds");
   }
 
   void calcSimpleDerivative()
@@ -258,8 +303,8 @@ public:
 
         joint_velocities_[joint_id].push_back(vel);
       }
+      joint_velocities_[joint_id].push_back(0.0); // TODO(davetcoleman): how to calculate final derivative?
     }
-    //std::cout << "done deriv " << std::endl;
   }
 
 private:

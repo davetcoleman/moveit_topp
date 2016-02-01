@@ -10,18 +10,22 @@ num_joints = 1;
 filename = '/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv';
 
 % read
-raw = csvread(filename,1,0);
-joints = [1:1:num_joints];
-i=1;
-timestamp = raw(:,i);i=i+1;
-%timestamp = timestamp - timestamp(1) + time_offset;
+traj_data  = load_moveit_traj(filename, num_joints);
+                                  
+hold on;    
+plot(traj_data.timestamp, traj_data.pos(:,1), 'DisplayName','PP Fitted Position');
+plot(traj_data.timestamp, traj_data.vel(:,1), 'DisplayName','PP Fitted Velocity');
+plot(traj_data.timestamp, traj_data.acc(:,1), 'DisplayName','PP Fitted Acceleration');
 
-% Preallocate memory
-pos= zeros(size(timestamp,1),num_joints);
+% Adjust size of plot
+plot_gca = get(gca, 'Position');
+plot_gca(1) = 0.03; % x
+plot_gca(2) = 0.06; % y
+plot_gca(3) = 0.95; % percent width
+plot_gca(4) = 0.9; % percent height
+set(gca, 'Position', plot_gca)
 
-% Convert input data to better structures
-for j = joints
-    pos(:,j)=raw(:,i);i=i+1;
-end
-    
-plot(timestamp, pos);
+xlabel('Time')
+ylabel('Radians')
+legend('Location','northwest');
+figure(1)

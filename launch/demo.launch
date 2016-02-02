@@ -1,0 +1,50 @@
+<launch>
+
+  <!-- GDB functionality -->
+  <arg name="debug" default="false" />
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+  <arg     if="$(arg debug)" name="launch_prefix"
+       value="gdb -x $(find iiwa_7_r800_control)/launch/debug_settings.gdb --ex run --args" />
+
+  <!-- Simulation or actual hardware -->
+  <arg name="simulation" default="true" />
+
+  <!-- Load the URDF, SRDF and other .yaml configuration files on the param server -->
+  <include file="$(find iiwa_7_r800_moveit_config)/launch/planning_context.launch">
+    <arg name="load_robot_description" value="true"/>
+    <arg name="robot_description" value="iiwa_7_r800/robot_description"/>
+  </include>
+
+  <group ns="iiwa_7_r800">
+
+    <!-- Load joint limits to override URDF -->
+    <rosparam file="$(find iiwa_7_r800_moveit_config)/config/joint_limits.yaml" command="load"/>
+
+    <!-- Load controller settings -->
+    <rosparam file="$(find iiwa_7_r800_control)/config/iiwa_7_r800_controllers.yaml" command="load"/>
+
+    <!-- Load SIMULATION hardware interface -->
+    <node if="$(arg simulation)" name="iiwa_7_r800_hw_interface" pkg="moveit_sim_controller"
+      type="moveit_sim_hw_main" output="screen" launch-prefix="$(arg launch_prefix)"/>
+
+    <!-- Load REAL hardware interface -->
+    <node unless="$(arg simulation)" name="iiwa_7_r800_hw_interface" pkg="iiwa_7_r800_control"
+      type="iiwa_7_r800_hw_interface_main" output="screen" launch-prefix="$(arg launch_prefix)"/>
+
+    <!-- Load controller manager -->
+    <node name="ros_control_controller_manager" pkg="controller_manager" type="controller_manager"
+      respawn="false" output="screen" args="spawn joint_state_controller
+                        cartesian_controller"/>
+                        <!-- position_trajectory_controller"/> -->
+                        <!-- reflexxes_trajectory_controller"/> -->
+
+    <!-- Convert joint states to /tf tranforms -->
+    <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"/>
+
+    <!-- Fake transform from world origin to robot origin (base) -->
+    <!-- <node pkg="tf" type="static_transform_publisher" name="$(anon tf)" args="0.5 0.0 1.0 0 0 0 /world /base_link 30" /> -->
+
+    <node pkg="tf" type="static_transform_publisher" name="$(anon tf)" args="0 0 0 0 0 0 /world /base_link 30" />
+  </group>
+
+</launch>

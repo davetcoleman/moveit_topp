@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   rosparam_shortcuts
   cmake_modules
   moveit_msgs
+  moveit_ros_planning
 )
 
 find_package(Eigen REQUIRED)
@@ -19,12 +20,14 @@ catkin_package(
   CATKIN_DEPENDS
     roscpp
     rosparam_shortcuts
+    moveit_ros_planning
   DEPENDS
     Eigen
   INCLUDE_DIRS
     include
+    external
   LIBRARIES
-    ${PROJECT_NAME}
+    ${PROJECT_NAME}_spline
     #${PROJECT_NAME}_wrapper
 )
 
@@ -34,8 +37,7 @@ catkin_package(
 
 include_directories(
   include
-  external/TOPP/src/
-  external/spline/
+  external
   ${catkin_INCLUDE_DIRS}
   ${EIGEN_INCLUDE_DIRS}
 )
@@ -99,6 +101,19 @@ set_target_properties(${PROJECT_NAME}_demo_joint_traj_to_optimal
   PROPERTIES OUTPUT_NAME demo_joint_traj_to_optimal PREFIX ""
 )
 target_link_libraries(${PROJECT_NAME}_demo_joint_traj_to_optimal
+  ${PROJECT_NAME}
+  ${PROJECT_NAME}_spline
+  ${catkin_LIBRARIES}
+)
+
+# Demo: Convert ROS Trajectory Message Waypoints into Time-Optimal Discretized Path
+add_executable(${PROJECT_NAME}_demo_traj_msg_to_optimal
+  src/demo_traj_msg_to_optimal.cpp
+)
+set_target_properties(${PROJECT_NAME}_demo_traj_msg_to_optimal
+  PROPERTIES OUTPUT_NAME demo_traj_msg_to_optimal PREFIX ""
+)
+target_link_libraries(${PROJECT_NAME}_demo_traj_msg_to_optimal
   ${PROJECT_NAME}
   ${PROJECT_NAME}_spline
   ${catkin_LIBRARIES}

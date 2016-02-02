@@ -60,10 +60,13 @@ int main(int argc, char** argv)
   moveit_topp::SplineFitting spline_fitting;
 
   // Initialize optimizer
-  moveit_topp::MoveItTopp optimizer;
+  std::vector<double> vel_limits = {0.7895, 0.7895, 0.973, 1.2162, 1.7143, 2.6471, 3.3962};
+  std::vector<double> acc_limits = {0.7895, 0.7895, 0.973, 1.2162, 1.7143, 2.6471, 3.3962};
+  moveit_topp::MoveItTopp optimizer(vel_limits, acc_limits);
 
   // Load pre-generated (from Matlab) piecewise polynomial from file
-  spline_fitting.readJointTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv");
+  std::size_t num_joints = 7;
+  spline_fitting.readJointTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj_short.csv", num_joints);
 
   // Benchmark runtime
   ros::Time start_time = ros::Time::now();

@@ -56,7 +56,9 @@ int main(int argc, char** argv)
   spinner.start();
 
   // Initialize main class
-  moveit_topp::MoveItTopp optimizer;
+  std::vector<double> vel_limits = {0.7895, 0.7895, 0.973, 1.2162, 1.7143, 2.6471, 3.3962};
+  std::vector<double> acc_limits = {0.7895, 0.7895, 0.973, 1.2162, 1.7143, 2.6471, 3.3962};
+  moveit_topp::MoveItTopp optimizer(vel_limits, acc_limits);
 
   // Load pre-generated (from Matlab) piecewise polynomial from file
   TOPP::Trajectory orig_trajectory;

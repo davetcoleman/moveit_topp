@@ -7,8 +7,8 @@ clf
 
 % Settings
 use_moveit_data = true;
-show_pos = 1;
-show_vel = 0;
+show_pos = 0;
+show_vel = 1;
 show_acc = 0;
 
 % ------------------------------------------------------------------------
@@ -19,10 +19,10 @@ if (use_moveit_data)
     moveit_data  = load_moveit_traj(filename, num_joints);
        
     % scale time
-    time_scaling_factor = 30;
+    time_scaling_factor = 15;
     moveit_data.timestamp = moveit_data.timestamp / time_scaling_factor;
     
-    only_use_one_joint = true;
+    only_use_one_joint = false;
     if (only_use_one_joint)
         num_joints = 1;
         joint_id = 1;
@@ -49,9 +49,12 @@ traj_data  = load_moveit_traj(filename2, num_joints);
 
 % Show fitted
 hold on
-if (show_pos); plot(traj_data.timestamp, traj_data.pos(:,1), 'DisplayName','TOPP Fitted Position'); end;
-if (show_vel); plot(traj_data.timestamp, traj_data.vel(:,1), 'DisplayName','TOPP Fitted Velocity'); end;
-if (show_acc); plot(traj_data.timestamp, traj_data.acc(:,1), 'DisplayName','TOPP Fitted Acceleration'); end;
+for joint = 1:num_joints
+    title_str = sprintf(' Joint %i',joint);
+    if (show_pos); plot(traj_data.timestamp, traj_data.pos(:,joint), 'DisplayName',strcat('TOPP ',title_str,' Position')); end;
+    if (show_vel); plot(traj_data.timestamp, traj_data.vel(:,joint), 'DisplayName',strcat('TOPP ',title_str,' Velocity')); end;
+    if (show_acc); plot(traj_data.timestamp, traj_data.acc(:,joint), 'DisplayName',strcat('TOPP ',title_str,' Acceleration')); end;
+end
 % ------------------------------------------------------------------------
 
 % Show input
@@ -64,15 +67,19 @@ piecewise_polyn = spline(in_time, in_pos);
 discretization = 0.01;
 time = [0:discretization:in_time(end)];
 pos = ppval(piecewise_polyn, time);
-vel = diff(pos)./diff(time);
-vel = [vel vel(end)]; %TODO this repeats the final velocity value twice
-acc = diff(vel)./diff(time);
-acc = [acc acc(end)]; %TODO this repeats the final velocity value twice
+% vel_time = time(:,1:end-1);
+% vel_time=repmat(vel_time,num_joints,1);
+% size(vel_time)
+% size(diff(pos')')
+% vel = diff(pos')'./diff(vel_time);
+% vel = [vel vel(end)]; %TODO this repeats the final velocity value twice
+% acc = diff(vel)./diff(time);
+% acc = [acc acc(end)]; %TODO this repeats the final velocity value twice
 
 % Plot
 if (show_pos); plot(time, pos, 'DisplayName','Position'); end;
-if (show_vel); plot(time, vel,'DisplayName','Velocity'); end;
-if (show_acc); plot(time, acc,'DisplayName','Acceleration'); end;
+%if (show_vel); plot(time, vel,'DisplayName','Velocity'); end;
+%if (show_acc); plot(time, acc,'DisplayName','Acceleration'); end;
 
 % Adjust size of plot
 plot_gca = get(gca, 'Position');

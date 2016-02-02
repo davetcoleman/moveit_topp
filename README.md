@@ -81,9 +81,17 @@ See [Class Reference](http://docs.ros.org/indigo/api/moveit_topp/html/)
 
         matlab scripts/display_TOPP_traj.m
 
-## Demo: Convert MoveIt RobotTrajectory into Time-Optimal Path
+## Demo: Convert ROS Trajectory Message Waypoints into Time-Optimal Discretized Path
 
-TODO
+- Generate a joint-space waypoints trajectory using MoveIt! and save into ``data/matlab_joint_traj.csv``
+- Convert the file into discretized optimized waypoints in C++ using TOPP via:
+
+        rosrun moveit_topp demo_traj_msg_to_optimal
+
+- This generates ``data/topp_optimized_traj.csv``
+- View the generated discretized waypoints:
+
+        matlab scripts/display_TOPP_traj.m
 
 ## Testing and Linting
 

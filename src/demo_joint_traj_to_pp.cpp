@@ -56,16 +56,17 @@ int main(int argc, char** argv)
   spinner.start();
 
   // Initialize main class
-  moveit_topp::SplineFitting converter;
+  moveit_topp::SplineFitting spline_fitting;
 
   // Load pre-generated (from Matlab) piecewise polynomial from file
-  converter.readJointTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv");
+  std::size_t num_joints = 7;
+  spline_fitting.readJointTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv", num_joints);
 
   // Fit a spline to waypoints
-  converter.fitSpline();
+  spline_fitting.fitSpline();
 
   // Write coefficients to file (for use with Matlab)
-  converter.writeCoefficientsToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/spline_pp_traj.csv");
+  spline_fitting.writeCoefficientsToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/spline_pp_traj.csv");
 
   // Shutdown
   ROS_INFO_STREAM_NAMED("main", "Finished.");

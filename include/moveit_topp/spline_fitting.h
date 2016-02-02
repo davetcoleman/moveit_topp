@@ -51,36 +51,35 @@
 #include <rosparam_shortcuts/rosparam_shortcuts.h>
 
 // Spline
-#include "spline.hpp"
+#include <spline/spline.hpp>
 
 // TOPP
-#include "Trajectory.h"
+#include <TOPP/src/Trajectory.h>
 
 namespace moveit_topp
 {
-
 class SplineFitting
 {
 public:
-
   /**
    * \brief Constructor
    */
   SplineFitting()
-    : name_("spline_fitting")
   {
     // Load rosparams
-    //ros::NodeHandle rpnh(nh_, name_);
-    //std::size_t error = 0;
-    //error += !rosparam_shortcuts::get(name_, rpnh, "control_rate", control_rate_);
+    // ros::NodeHandle rpnh(nh_, name_);
+    // std::size_t error = 0;
+    // error += !rosparam_shortcuts::get(name_, rpnh, "control_rate", control_rate_);
     // add more parameters here to load if desired
-    //rosparam_shortcuts::shutdownIfError(name_, error);
+    // rosparam_shortcuts::shutdownIfError(name_, error);
 
-    ROS_INFO_STREAM_NAMED(name_,"SplineFitting Ready.");
+    ROS_INFO_STREAM_NAMED(name_, "SplineFitting Ready.");
   }
 
-  void readJointTrajFromFile(const std::string& filename)
+  void readJointTrajFromFile(const std::string& filename, std::size_t num_joints)
   {
+    num_joints_ = num_joints;
+
     // Open file
     std::ifstream input_file;
     input_file.open(filename.c_str());
@@ -136,6 +135,27 @@ public:
     }  // while
   }
 
+  void setJointPositions(const std::vector<std::vector<double>>& joint_positions, const std::vector<double>& timetamps)
+  {
+    // Error check
+    if (joint_positions.empty())
+    {
+      ROS_ERROR_STREAM_NAMED(name_, "No waypoints passed in");
+      return;
+    }
+    if (joint_positions.front().empty())
+    {
+      ROS_ERROR_STREAM_NAMED(name_, "No joint values passed in");
+      return;
+    }
+    // Copy in num joints
+    num_joints_ = joint_positions.front().size();
+
+    // Save joint positions
+    joint_positions_ = joint_positions;
+    timetamps_ = timetamps;
+  }
+
   void fitSpline()
   {
     ROS_INFO_STREAM_NAMED(name_, "Fitting spline");
@@ -146,6 +166,11 @@ public:
       ROS_ERROR_STREAM_NAMED(name_, "No data loaded to fit");
       return;
     }
+    if (joint_positions_.size() != num_joints_)
+    {
+      ROS_ERROR_STREAM_NAMED(name_, "Incorrect number of joints passed in");
+      return;
+    }
     if (timestamps_.size() != joint_positions_.front().size())
     {
       ROS_ERROR_STREAM_NAMED(name_, "Data size invalid between timestamps and joint_positions");
@@ -153,8 +178,8 @@ public:
     }
 
     // Get the velocities
-    bool use_simple_derivatie = false;
-    if (use_simple_derivatie)
+    bool use_simple_derivative = false;
+    if (use_simple_derivative)
     {
       calcSimpleDerivative();
 
@@ -166,58 +191,59 @@ public:
       }
     }
 
-    // TODO(davetcoleman): process more than just joint 0
-    std::size_t joint_id = 0;
-
-    int ndata = timestamps_.size(); // TODO(davetcoleman): is it ok to loose the final datapoint? it was removed b/c no derivative
+    int ndata = timestamps_.size();
     double* tdata = &timestamps_[0];
-    double* ydata = &joint_positions_[joint_id][0];
-    double* ypdata;
-    if (use_simple_derivatie)
-      ypdata = &joint_velocities_[joint_id][0];
-    else
-      ypdata = new double[ndata];
+    coefficients_.resize(num_joints_);
 
     // Benchmark runtime
     ros::Time start_time = ros::Time::now();
 
-    // Set derivatives for a piecewise cubic Hermite interpolant.
-    ROS_INFO_STREAM_NAMED(name_, "Calculating spline pchip set");
-    spline_pchip_set( ndata, tdata, ydata, ypdata);
+    for (std::size_t joint_id = 0; joint_id < num_joints_; ++joint_id)
+    {
+      double* ydata = &joint_positions_[joint_id][0];
+      double* ypdata;
+      if (use_simple_derivative)
+        ypdata = &joint_velocities_[joint_id][0];
+      else
+        ypdata = new double[ndata];
 
-    // Set up a piecewise cubic Hermite interpolant
-    ROS_INFO_STREAM_NAMED(name_, "Calculating spline hermite set");
-    coefficients_ = spline_hermite_set(ndata, tdata, ydata, ypdata);
+      // Set derivatives for a piecewise cubic Hermite interpolant.
+      ROS_INFO_STREAM_NAMED(name_, "Calculating spline pchip set");
+      spline_pchip_set(ndata, tdata, ydata, ypdata);
+
+      // Set up a piecewise cubic Hermite interpolant
+      ROS_INFO_STREAM_NAMED(name_, "Calculating spline hermite set");
+      coefficients_[joint_id] = spline_hermite_set(ndata, tdata, ydata, ypdata);
+
+      // Output coefficients
+      bool verbose = false;
+      if (verbose)
+      {
+        std::cout << "Timestamp       Position        ";
+        if (use_simple_derivative)
+          std::cout << "Velocity       ";
+        std::cout << "SVelocity        Coefficient1    Coefficient2    Coefficient3    Coefficient4 " << std::endl;
+        for (std::size_t j = 0; j < std::size_t(ndata); ++j)
+        {
+          std::cout << std::fixed << tdata[j] << "\t" << ydata[j] << "\t";
+          if (use_simple_derivative)
+            std::cout << joint_velocities_[joint_id][j] << "\t";
+          std::cout << ypdata[j] << "\t";
+          for (std::size_t i = 0; i < 4; ++i)
+          {
+            std::cout << coefficients_[joint_id][j * 4 + i] << "\t";
+          }
+          std::cout << std::endl;
+        }
+      }
+    }  // end for
 
     // Benchmark runtime
     double duration = (ros::Time::now() - start_time).toSec();
-    ROS_INFO_STREAM_NAMED(name_,"Conversion to polynomial: " << duration << " seconds");
-
-    // Output coefficients
-    bool verbose = false;
-    if (verbose)
-    {
-      std::cout << "Timestamp       Position        ";
-      if (use_simple_derivatie)
-        std::cout << "Velocity       ";
-      std::cout << "SVelocity        Coefficient1    Coefficient2    Coefficient3    Coefficient4 " << std::endl;
-      for (std::size_t j = 0; j < std::size_t(ndata); ++j)
-      {
-        std::cout << std::fixed << tdata[j] << "\t" << ydata[j] << "\t";
-        if (use_simple_derivatie)
-          std::cout << joint_velocities_[joint_id][j] << "\t";
-        std::cout << ypdata[j] << "\t";
-        for (std::size_t i = 0; i < 4; ++i)
-        {
-          // TODO(davetcoleman): is this the right order??
-          std::cout << coefficients_[j*4 + i] << "\t";
-        }
-        std::cout << std::endl;
-      }
-    }
+    ROS_INFO_STREAM_NAMED(name_, "Conversion to polynomial: " << duration << " seconds");
   }
 
-  void writeCoefficientsToFile(const std::string &file_path)
+  void writeCoefficientsToFile(const std::string& file_path)
   {
     ROS_INFO_STREAM_NAMED(name_, "Writing coefficients to file");
 
@@ -227,15 +253,18 @@ public:
     // Output header -------------------------------------------------------
     output_handle << "duration,C1,C2,C3,C4" << std::endl;
 
+    // TODO(davetcoleman): currently only outputs first joint
+    std::size_t joint_id = 0;
+
     for (std::size_t i = 0; i < timestamps_.size() - 1; ++i)
     {
       output_handle.precision(10);
-      //output_handle << timestamps_[i+1] - timestamps_[i] << ",";
+      // output_handle << timestamps_[i+1] - timestamps_[i] << ",";
       output_handle << timestamps_[i] << ",";
 
       for (std::size_t c = 0; c < 4; ++c)
       {
-        output_handle << coefficients_[i*4 + (3-c)] << ",";
+        output_handle << coefficients_[joint_id][i * 4 + (3 - c)] << ",";
       }
       output_handle << std::endl;
     }
@@ -246,38 +275,34 @@ public:
   /**
    * \brief Convert the coefficients into the TOPP trajectory format
    */
-  void getPPTrajectory(TOPP::Trajectory &trajectory)
+  void getPPTrajectory(TOPP::Trajectory& trajectory)
   {
-    // Benchmark runtime
-    ros::Time start_time = ros::Time::now();
-
     ROS_INFO_STREAM_NAMED(name_, "Converting coefficients to new format");
 
-    std::list<TOPP::Chunk> chunks_list;
+    std::list<TOPP::Chunk> chunks_list(timestamps_.size());
+    std::list<TOPP::Chunk>::iterator chunk_it = chunks_list.begin();
+    std::vector<TOPP::Polynomial> polynomials_vector(num_joints_);
+    std::vector<TOPP::dReal> coefficients_vector(4);
 
-    for (std::size_t i = 0; i < timestamps_.size() - 1; ++i)
+    for (std::size_t chunk_id = 0; chunk_id < timestamps_.size() - 1; ++chunk_id) // TODO(davetcoleman): why is it minus one?
     {
-      std::vector<TOPP::Polynomial> polynomials_vector;
-      std::vector<TOPP::dReal> coefficients_vector;
-
-      for (std::size_t c = 0; c < 4; ++c)
+      for (std::size_t joint_id = 0; joint_id < num_joints_; ++joint_id)
       {
-        double coeff = coefficients_[i*4 + c];
-        coefficients_vector.push_back(coeff);
+        for (std::size_t coeff_id = 0; coeff_id < 4; ++coeff_id)
+        {
+          coefficients_vector[coeff_id] = coefficients_[joint_id][chunk_id * 4 + coeff_id];
+        }
+        polynomials_vector[joint_id] = TOPP::Polynomial(coefficients_vector);
       }
-      polynomials_vector.push_back(TOPP::Polynomial(coefficients_vector));
 
-      // TODO(davetcoleman): loop through joints / dimensions
-      double duration = timestamps_[i+1] - timestamps_[i];
-      chunks_list.push_back(TOPP::Chunk(duration, polynomials_vector));
+      double duration = timestamps_[chunk_id + 1] - timestamps_[chunk_id];
+      //chunks_list[chunk_id] = TOPP::Chunk(duration, polynomials_vector);
+      (*chunk_it) = TOPP::Chunk(duration, polynomials_vector);
+      chunk_it++;
     }
 
     // Create final trajectory
     trajectory.InitFromChunksList(chunks_list);
-
-    // Benchmark runtime
-    double duration = (ros::Time::now() - start_time).toSec();
-    ROS_INFO_STREAM_NAMED(name_,"Total time: " << duration << " seconds");
   }
 
   void calcSimpleDerivative()
@@ -293,44 +318,43 @@ public:
       // For each waypoint
       for (std::size_t i = 1; i < joint_positions_[joint_id].size(); ++i)
       {
-        double pos_diff = joint_positions_[joint_id][i] - joint_positions_[joint_id][i-1];
+        double pos_diff = joint_positions_[joint_id][i] - joint_positions_[joint_id][i - 1];
         double t_diff = timestamps_[i] - timestamps_[i - 1];
         double vel = pos_diff / t_diff;
         if (verbose)
           std::cout << "joint_id: " << joint_id << " i: " << std::setfill('0') << std::setw(2) << i
-                    << " pos_diff: " << std::fixed << pos_diff
-                    << " \tt_diff: " << t_diff << " \tvel: " << vel << std::endl;
+                    << " pos_diff: " << std::fixed << pos_diff << " \tt_diff: " << t_diff << " \tvel: " << vel
+                    << std::endl;
 
         joint_velocities_[joint_id].push_back(vel);
       }
-      joint_velocities_[joint_id].push_back(0.0); // TODO(davetcoleman): how to calculate final derivative?
+      joint_velocities_[joint_id].push_back(0.0);  // TODO(davetcoleman): how to calculate final derivative?
     }
   }
 
 private:
-
   // --------------------------------------------------------
 
   // The short name of this class
-  std::string name_;
+  std::string name_ = "spline_fitting";
 
   // A shared node handle
   ros::NodeHandle nh_;
 
-  std::size_t num_joints_ = 7;
+  std::size_t num_joints_;
 
   // Read data
   std::vector<double> timestamps_;
-  std::vector<std::vector<double> > joint_positions_;
-  std::vector<std::vector<double> > joint_velocities_;
-  double *coefficients_; // SPLINE_HERMITE_SET
+  std::vector<std::vector<double>> joint_positions_;
+  std::vector<std::vector<double>> joint_velocities_;
+  std::vector<double*> coefficients_;  // SPLINE_HERMITE_SET
 
-}; // end class
+};  // end class
 
 // Create boost pointers for this class
 typedef boost::shared_ptr<SplineFitting> SplineFittingPtr;
 typedef boost::shared_ptr<const SplineFitting> SplineFittingConstPtr;
 
-} // namespace moveit_topp
+}  // namespace moveit_topp
 
 #endif  // MOVEIT_TOPP_SPLINE_FITTING_H

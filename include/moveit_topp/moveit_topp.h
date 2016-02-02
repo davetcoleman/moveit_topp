@@ -51,16 +51,16 @@
 #include <rosparam_shortcuts/rosparam_shortcuts.h>
 
 // TOPP
-#include "TOPP.h"
-#include "KinematicLimits.h"
-#include "TorqueLimits.h"
-#include "PolygonConstraints.h"
+#include <TOPP/src/TOPP.h>
+#include <TOPP/src/KinematicLimits.h>
+#include <TOPP/src/TorqueLimits.h>
+#include <TOPP/src/PolygonConstraints.h>
 
 // Spline
-#include "spline.hpp"
+#include <spline/spline.hpp>
 
 // MoveIt
-#include <moveit_msgs/RobotTrajectory.h>
+#include <moveit/robot_trajectory/robot_trajectory.h>
 
 namespace moveit_topp
 {
@@ -72,7 +72,32 @@ public:
   /**
    * \brief Constructor
    */
-  MoveItTopp()
+  MoveItTopp(const moveit::core::JointModelGroup* jmg)
+    : jmg_(jmg)
+  {
+    std::vector<double> vel_limits;
+    std::vector<double> acc_limits;
+    for (std::size_t i = 0; i < jmg->getActiveJointModels().size(); ++i)
+    {
+      const moveit::core::JointModel::Bounds& bounds = jmg->getActiveJointModels()[i]->getVariableBounds();
+      if (bounds.size() != 1)
+      {
+        ROS_ERROR_STREAM_NAMED(name_, "Invalid number of bounds");
+        continue;
+      }
+      const moveit::core::VariableBounds& bound = bounds.front();
+      vel_limits.push_back(bound.max_velocity_);
+      acc_limits.push_back(bound.max_acceleration_);
+      std::cout << "bound.max_velocity_: " << bound.max_velocity_ << std::endl;
+      std::cout << "bound.max_acceleration_: " << bound.max_acceleration_ << std::endl;
+    }
+    MoveItTopp(vel_limits, acc_limits);
+  }
+
+  /**
+   * \brief Constructor
+   */
+  MoveItTopp(const std::vector<double> &vel_limits, const std::vector<double> &acc_limits)
   {
     // Load rosparams
     //ros::NodeHandle rpnh(nh_, name_);
@@ -81,32 +106,57 @@ public:
     // add more parameters here to load if desired
     //rosparam_shortcuts::shutdownIfError(name_, error);
 
-
-    // Config TODO(davetcoleman): do not hard code
-    std::size_t num_joints = 7;
-    double discrtimestep = 0.005;
-    double max_velocity = 2;
-    double max_acceleration = 10;
+    double discrtimestep = 0.005; // TODO(davetcoleman): no hardcode
     std::string constraint_string = std::to_string(discrtimestep);
     constraint_string.append("\n");
-    // TODO(davetcoleman): do not hardcode constraints
-    std::string temp = std::to_string(max_velocity).append(" ");
-    for (std::size_t i = 0; i < num_joints; ++i)
+    for (std::size_t i = 0; i < vel_limits.size(); ++i)
+    {
+      std::string temp = std::to_string(vel_limits[i]).append(" ");
       constraint_string.append(temp); // velocity
+    }
     constraint_string.append("\n");
-    temp = std::to_string(max_acceleration).append(" ");
-    for (std::size_t i = 0; i < num_joints; ++i)
-      constraint_string.append(temp); // velocity
-
-    // Debug
-    std::cout << "-------------------------------------------------------" << std::endl;
-    std::cout << "constraint_string: \n" << constraint_string << std::endl;
+    for (std::size_t i = 0; i < vel_limits.size(); ++i)
+    {
+      std::string temp = std::to_string(acc_limits[i]).append(" ");
+      constraint_string.append(temp); // acceleration
+    }
 
     // Setup constraints
     pconstraints_.reset(new TOPP::KinematicLimits(constraint_string));
 
-
     ROS_INFO_STREAM_NAMED(name_,"MoveItTopp Ready.");
+  }
+
+  void computeTimeStamps(robot_trajectory::RobotTrajectory& robot_traj)
+  {
+    // Populate joint_positions with robot trajectory
+    std::vector<std::vector<double>> joint_positions;
+    std::vector<double> timetamps;
+
+    // Resize
+    joint_positions.resize(robot_traj.getWayPointCount());
+    timestamps.resize(robot_traj.getWayPointCount());
+
+    for (std::size_t i = 0; i < robot_traj.getWayPointCount(); ++i)
+    {
+      joint_positions[i].resize(jmg_->getVariableCount());
+      robot_traj.getWayPoint(i)->copyJointGroupPositions(jmg_, &joint_positions[i][0]);
+      timestamps[i] = 1.0; // dummy value
+    }
+
+    // Setup Spline Fitting
+    spline_fitting_.setJointPositions(joint_positions, timestamps);
+
+    // Fit a spline to waypoinst
+    spline_fitting.fitSpline();
+
+    // Convert to TOPP format
+    TOPP::Trajectory orig_trajectory;
+    spline_fitting.getPPTrajectory(orig_trajectory);
+
+    // Time-Optimize with respect to constraints
+    TOPP::Trajectory new_trajectory;
+    optimizeTrajectory(orig_trajectory, new_trajectory);
   }
 
   void readPPTrajFromFile(const std::string& filename, TOPP::Trajectory &trajectory)
@@ -155,18 +205,18 @@ public:
 
     // Benchmark runtime
     double duration2 = (ros::Time::now() - start_time2).toSec();
-    ROS_ERROR_STREAM_NAMED(name_, "Profiles time: " << duration2 << " seconds (" << 1.0/duration2 << " hz)");
+    ROS_INFO_STREAM_NAMED(name_, "Profiles time: " << duration2 << " seconds (" << 1.0/duration2 << " hz)");
 
     // Reparameterize
     ROS_INFO_STREAM_NAMED(name_, "Parameterizing");
     //pconstraints_->reparamtimestep = 0; // Original value - sets automatically
-    pconstraints_->reparamtimestep = 0.001; // DTC Causes less points to be created, faster
+    pconstraints_->reparamtimestep = 0.01; // DTC Causes less points to be created, faster
     ros::Time start_time3 = ros::Time::now();
     pconstraints_->trajectory.Reparameterize(*pconstraints_, new_trajectory);
 
     // Benchmark runtime
     double duration3 = (ros::Time::now() - start_time3).toSec();
-    ROS_ERROR_STREAM_NAMED(name_, "Parameterize time: " << duration3 << " seconds (" << 1.0/duration3 << " hz)");
+    ROS_INFO_STREAM_NAMED(name_, "Parameterize time: " << duration3 << " seconds (" << 1.0/duration3 << " hz)");
 
     // Get results
     //WriteResultTrajectory();
@@ -187,7 +237,7 @@ public:
 
     // Output header -------------------------------------------------------
     output_handle << "time_from_start,";
-    for (std::size_t i = 0; i < trajectory.dimension; ++i)
+    for (std::size_t i = 0; i < std::size_t(trajectory.dimension); ++i)
     {
       output_handle << "j" << std::to_string(i) << "_pos,";
       output_handle << "j" << std::to_string(i) << "_vel,";
@@ -198,6 +248,7 @@ public:
     // Debug
     ROS_INFO_STREAM_NAMED(name_, " - Number of waypoints: " << trajectory.chunkslist.size());
     ROS_INFO_STREAM_NAMED(name_, " - Trajectory duration: " << trajectory.duration);
+    ROS_INFO_STREAM_NAMED(name_, " - Trajectory dimension: " << trajectory.dimension);
 
     // Discretize back into waypoints
     double dt = 0.01;
@@ -244,6 +295,13 @@ private:
 
   // TOPP vars
   boost::shared_ptr<TOPP::Constraints> pconstraints_;
+
+  // Group of joints to use
+  const moveit::core::JointModelGroup* jmg_;
+
+  // Initialize interpolater
+  moveit_topp::SplineFitting spline_fitting_;
+
 }; // end class
 
 // Create boost pointers for this class

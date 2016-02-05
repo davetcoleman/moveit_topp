@@ -75,7 +75,7 @@ public:
   /**
    * \brief Constructor
    */
-  MoveItTopp(const moveit::core::JointModelGroup* jmg);
+  MoveItTopp(ros::NodeHandle &nh, const moveit::core::JointModelGroup* jmg);
 
   /**
    * \brief Constructor
@@ -114,6 +114,15 @@ private:
 
   // Initialize interpolater
   moveit_topp::SplineFitting spline_fitting_;
+
+  // Used by convertMoveItTrajToPP()
+  std::vector<std::vector<double> > tmp_joint_positions_;
+  std::vector<double> tmp_jmg_positions_;
+  std::vector<double> tmp_timestamps_;
+
+  // Settings
+  bool debug_write_coeff_to_file_ = false;
+  bool debug_write_joint_traj_to_file_ = false;
 
 }; // end class
 

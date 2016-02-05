@@ -17,7 +17,8 @@ show_optimized = 1;
 % Input trajectory
 if (use_moveit_data)
     num_joints = 7;
-    filename = '/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv';
+    %filename = '/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv';
+    filename = '/home/dave/ros/current/iiwa_trajectory_data/arm_moveit_trajectory_0.csv';
     moveit_data  = load_moveit_traj(filename, num_joints);
        
     % scale time

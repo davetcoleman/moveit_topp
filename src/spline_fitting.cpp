@@ -137,7 +137,7 @@ namespace moveit_topp
 
   void SplineFitting::fitSpline()
   {
-    ROS_INFO_STREAM_NAMED(name_, "Fitting spline");
+    ROS_DEBUG_STREAM_NAMED(name_, "Fitting spline");
 
     // Error check
     if (joint_positions_.empty())
@@ -187,15 +187,15 @@ namespace moveit_topp
         ypdata = new double[ndata];
 
       // Set derivatives for a piecewise cubic Hermite interpolant.
-      ROS_INFO_STREAM_NAMED(name_, "Calculating spline pchip set");
+      //ROS_INFO_STREAM_NAMED(name_, "Calculating spline pchip set");
       spline_pchip_set(ndata, tdata, ydata, ypdata);
 
       // Set up a piecewise cubic Hermite interpolant
-      ROS_INFO_STREAM_NAMED(name_, "Calculating spline hermite set");
+      //ROS_INFO_STREAM_NAMED(name_, "Calculating spline hermite set");
       coefficients_[joint_id] = spline_hermite_set(ndata, tdata, ydata, ypdata);
 
       // Output coefficients
-      bool verbose = false;
+      bool verbose = true;
       if (verbose)
       {
         std::cout << "Timestamp       Position        ";
@@ -226,29 +226,44 @@ namespace moveit_topp
   {
     ROS_INFO_STREAM_NAMED(name_, "Writing coefficients to file");
 
+    // Open file
     std::ofstream output_handle;
     output_handle.open(file_path.c_str());
 
-    // Output header -------------------------------------------------------
-    output_handle << "duration,C1,C2,C3,C4" << std::endl;
-
-    // TODO(davetcoleman): currently only outputs first joint
-    std::size_t joint_id = 0;
-
     for (std::size_t i = 0; i < timestamps_.size() - 1; ++i)
     {
-      output_handle.precision(10);
-      // output_handle << timestamps_[i+1] - timestamps_[i] << ",";
-      output_handle << timestamps_[i] << ",";
-
-      for (std::size_t c = 0; c < 4; ++c)
+      std::cout << "timestamp " << timestamps_[i] << std::endl;
+      // Timestamp
+      if (i == 0)
       {
-        output_handle << coefficients_[joint_id][i * 4 + (3 - c)] << ",";
+        output_handle << timestamps_[i] << std::endl;
       }
-      output_handle << std::endl;
+      else
+      {
+        output_handle << timestamps_[i] - timestamps_[i-1] << std::endl;
+      }
+
+      // Num joints
+      output_handle << num_joints_ << std::endl;
+
+      // Coefficients
+      output_handle.precision(10);
+      for (std::size_t joint_id = 0; joint_id < num_joints_; ++joint_id)
+      {
+        for (std::size_t c = 0; c < 4; ++c)
+        {
+          //std::cout << "joint_id " << joint_id << " then " << i << " then " << c << " = " << (i * 4 + (3 - c)) << std::endl;
+          output_handle << coefficients_[joint_id][i * 4 + (3 - c)];
+          if (c < 3)
+            output_handle << ",";
+        }
+        output_handle << std::endl;
+      }
     }
+
+    // Save
     output_handle.close();
-    ROS_INFO_STREAM_NAMED(name_, "Saved trajectory to file " << file_path);
+    ROS_INFO_STREAM_NAMED(name_, "Saved coefficients to file " << file_path);
   }
 
   void SplineFitting::getPPTrajectory(TOPP::Trajectory& trajectory)

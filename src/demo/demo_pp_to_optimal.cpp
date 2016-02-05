@@ -62,7 +62,8 @@ int main(int argc, char** argv)
 
   // Load pre-generated (from Matlab) piecewise polynomial from file
   TOPP::Trajectory orig_trajectory;
-  optimizer.readPPTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/matlab_pp_traj.csv", orig_trajectory);
+  //optimizer.readPPTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/matlab_pp_traj.csv", orig_trajectory);
+  optimizer.readPPTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/spline_pp_traj.csv", orig_trajectory);
 
   bool debug = false;
   if (debug)

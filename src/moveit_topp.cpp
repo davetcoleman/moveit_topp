@@ -42,8 +42,9 @@
 namespace moveit_topp
 {
 
-MoveItTopp::MoveItTopp(const moveit::core::JointModelGroup* jmg)
-  : jmg_(jmg)
+MoveItTopp::MoveItTopp(ros::NodeHandle &nh, const moveit::core::JointModelGroup* jmg)
+  : nh_(nh)
+  , jmg_(jmg)
 {
   std::vector<double> vel_limits;
   std::vector<double> acc_limits;
@@ -61,17 +62,24 @@ MoveItTopp::MoveItTopp(const moveit::core::JointModelGroup* jmg)
     //std::cout << "bound.max_velocity_: " << bound.max_velocity_ << std::endl;
     //std::cout << "bound.max_acceleration_: " << bound.max_acceleration_ << std::endl;
   }
+
+  // Resize datastructures for convertMoveItTrajToPP()
+  ROS_INFO_STREAM_NAMED(name_, "Joint model group var count: " << jmg_->getVariableCount());
+  tmp_joint_positions_.resize(jmg_->getVariableCount());
+  tmp_jmg_positions_.resize(jmg_->getVariableCount());
+
+  // Load rosparams
+  ros::NodeHandle rpnh(nh_, name_);
+  std::size_t error = 0;
+  error += !rosparam_shortcuts::get(name_, rpnh, "debug/write_coeff_to_file", debug_write_coeff_to_file_);
+  error += !rosparam_shortcuts::get(name_, rpnh, "debug/write_joint_traj_to_file", debug_write_joint_traj_to_file_);
+  rosparam_shortcuts::shutdownIfError(name_, error);
+
   init(vel_limits, acc_limits);
 }
 
 MoveItTopp::MoveItTopp(const std::vector<double> &vel_limits, const std::vector<double> &acc_limits)
 {
-  // Load rosparams
-  //ros::NodeHandle rpnh(nh_, name_);
-  //std::size_t error = 0;
-  //error += !rosparam_shortcuts::get(name_, rpnh, "control_rate", control_rate_);
-  // add more parameters here to load if desired
-  //rosparam_shortcuts::shutdownIfError(name_, error);
   init(vel_limits, acc_limits);
 }
 
@@ -85,6 +93,7 @@ void MoveItTopp::init(const std::vector<double> &vel_limits, const std::vector<d
     exit(-1);
   }
 
+  // Convert constraints into a weird string format required by TOPP
   double discrtimestep = 0.005; // TODO(davetcoleman): no hardcode
   std::string constraint_string = std::to_string(discrtimestep);
   constraint_string.append("\n");
@@ -99,7 +108,6 @@ void MoveItTopp::init(const std::vector<double> &vel_limits, const std::vector<d
     std::string temp = std::to_string(acc_limits[i]).append(" ");
     constraint_string.append(temp); // acceleration
   }
-
   bool verbose = false;
   if (verbose)
   {
@@ -120,6 +128,12 @@ void MoveItTopp::computeTimeStamps(robot_trajectory::RobotTrajectory& robot_traj
   // Fit a spline to waypoinst
   spline_fitting_.fitSpline();
 
+  // Write coefficients to file (for use with Matlab)
+  if (debug_write_coeff_to_file_)
+  {
+    spline_fitting_.writeCoefficientsToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/spline_pp_traj.csv");
+  }
+
   // Convert to TOPP format
   TOPP::Trajectory orig_trajectory;
   spline_fitting_.getPPTrajectory(orig_trajectory);
@@ -128,10 +142,12 @@ void MoveItTopp::computeTimeStamps(robot_trajectory::RobotTrajectory& robot_traj
   TOPP::Trajectory new_trajectory;
   optimizeTrajectory(orig_trajectory, new_trajectory);
 
-  // TESTING
-  //writeTrajectoryToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv",
-  //new_trajectory);
-  //return;
+  // Debug
+  if (debug_write_joint_traj_to_file_)
+  {
+    writeTrajectoryToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv",
+                          new_trajectory);
+  }
 
   // Convert trajectory back to MoveIt's format
   convertTrajToMoveItTraj(robot_traj, new_trajectory);
@@ -140,35 +156,29 @@ void MoveItTopp::computeTimeStamps(robot_trajectory::RobotTrajectory& robot_traj
 void MoveItTopp::convertMoveItTrajToPP(const robot_trajectory::RobotTrajectory& robot_traj)
 {
   // Populate joint_positions with robot trajectory
-  std::vector<std::vector<double> > joint_positions;
-  std::vector<double> jmg_positions;
-  std::vector<double> timestamps;
 
   // Resize
-  ROS_INFO_STREAM_NAMED(name_, "Converting robot trajectory with " << jmg_->getVariableCount() << " dof");
-  joint_positions.resize(jmg_->getVariableCount());
-  jmg_positions.resize(jmg_->getVariableCount());
-  timestamps.resize(robot_traj.getWayPointCount());
+  ROS_INFO_STREAM_NAMED(name_, "Converting MoveIt! robot trajectory with " << jmg_->getVariableCount() << " dof");
+  tmp_timestamps_.resize(robot_traj.getWayPointCount());
   for (std::size_t joint_id = 0; joint_id < jmg_->getVariableCount(); ++joint_id) // for each joint
   {
-    joint_positions[joint_id].resize(robot_traj.getWayPointCount());
+    tmp_joint_positions_[joint_id].resize(robot_traj.getWayPointCount());
   }
 
   // Copy - this requires transposing the matrix
   for (std::size_t i = 0; i < robot_traj.getWayPointCount(); ++i) // for each waypoint
   {
-    robot_traj.getWayPoint(i).copyJointGroupPositions(jmg_, &jmg_positions[0]); // TODO this is inefficient
+    robot_traj.getWayPoint(i).copyJointGroupPositions(jmg_, &tmp_jmg_positions_[0]); // TODO this is inefficient
     for (std::size_t joint_id = 0; joint_id < jmg_->getVariableCount(); ++joint_id) // for each joint
     {
-      joint_positions[joint_id][i] = jmg_positions[joint_id];
-      //std::cout << "setting " << joint_id << ", " << i << " to " << jmg_positions[joint_id] << std::endl;
+      tmp_joint_positions_[joint_id][i] = tmp_jmg_positions_[joint_id];
     }
 
-    timestamps[i] = i + 1.0; // dummy value
+    tmp_timestamps_[i] = i + 1.0; // dummy value TODO(davetcoleman): is this ok?
   }
 
   // Setup Spline Fitting
-  spline_fitting_.setJointPositions(joint_positions, timestamps);
+  spline_fitting_.setJointPositions(tmp_joint_positions_, tmp_timestamps_);
 }
 
 void MoveItTopp::readPPTrajFromFile(const std::string& filename, TOPP::Trajectory &trajectory)
@@ -309,7 +319,7 @@ bool MoveItTopp::convertTrajToMoveItTraj(robot_trajectory::RobotTrajectory& robo
   ROS_INFO_STREAM_NAMED(name_, " - Trajectory dimension: " << trajectory.dimension);
 
   // Discretize back into waypoints
-  double dt = 0.01;
+  double dt = 0.05;
 
   std::vector<double> position;
   std::vector<double> velocity;
@@ -322,17 +332,17 @@ bool MoveItTopp::convertTrajToMoveItTraj(robot_trajectory::RobotTrajectory& robo
   robot_state::RobotState state(robot_traj.getRobotModel());
 
   // Loop through trajectory at discretization dt
-  for (double time = 0; time < trajectory.duration; time+=dt)
+  for (double time = 0; time <= trajectory.duration; time += dt)
   {
     // Evaluate PP at this point in time
     trajectory.Eval(time, position);
     trajectory.Evald(time, velocity);
-    trajectory.Evaldd(time, acceleration);
+    //trajectory.Evaldd(time, acceleration);
 
     // Copy to robot state
     state.setJointGroupPositions(jmg_, position);
     state.setJointGroupVelocities(jmg_, velocity);
-    state.setJointGroupAccelerations(jmg_, acceleration);
+    //state.setJointGroupAccelerations(jmg_, acceleration);
 
     // Add state to trajectory
     robot_traj.addSuffixWayPoint(state, dt);

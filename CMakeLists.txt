@@ -28,7 +28,8 @@ catkin_package(
     external
   LIBRARIES
     ${PROJECT_NAME}_spline
-    #${PROJECT_NAME}_wrapper
+    ${PROJECT_NAME}_spline_fitting
+    ${PROJECT_NAME}_wrapper
 )
 
 ###########
@@ -45,7 +46,7 @@ include_directories(
 # --------------------------------------------
 # Configure Locations
 set(topp_LOCATION ${PROJECT_SOURCE_DIR}/external/TOPP/build/src/TOPPbindings.so)
-set(topp_DESTINATION ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_LIB_DESTINATION})
+set(topp_DESTINATION ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_LIB_DESTINATION}/lib${PROJECT_NAME}.so)
 MESSAGE( STATUS "topp_LOCATION:         " ${topp_LOCATION} )
 MESSAGE( STATUS "topp_DESTINATION:      " ${topp_DESTINATION} )
 
@@ -69,58 +70,80 @@ add_library(${PROJECT_NAME}_spline
 # )
 # --------------------------------------------
 
+# --------------------------------------------
+# Spline Fitting Wrapper Library
+add_library(${PROJECT_NAME}_spline_fitting
+  src/spline_fitting.cpp
+)
+target_link_libraries(${PROJECT_NAME}_spline_fitting
+  ${PROJECT_NAME}_spline
+  ${PROJECT_NAME}
+  ${catkin_LIBRARIES}
+)
+# --------------------------------------------
+
+# --------------------------------------------
+# TOPP Wrapper Library
+add_library(${PROJECT_NAME}_wrapper
+  src/moveit_topp.cpp
+)
+target_link_libraries(${PROJECT_NAME}_wrapper
+  ${PROJECT_NAME}
+  ${PROJECT_NAME}_spline_fitting
+  ${catkin_LIBRARIES}
+)
+# --------------------------------------------
+
 # Demo: Convert Piecewise Polynomial Trajectory to Time-Optimal Discretized Path
 add_executable(${PROJECT_NAME}_demo_pp_to_optimal
-  src/demo_pp_to_optimal.cpp
+  src/demo/demo_pp_to_optimal.cpp
 )
 set_target_properties(${PROJECT_NAME}_demo_pp_to_optimal
   PROPERTIES OUTPUT_NAME demo_pp_to_optimal PREFIX ""
 )
 target_link_libraries(${PROJECT_NAME}_demo_pp_to_optimal
-  ${PROJECT_NAME}
+  ${PROJECT_NAME}_wrapper
   ${catkin_LIBRARIES}
 )
 
 # Demo: Convert Joint Trajectory Waypoints into Piecewise Polynomial Trajectory
 add_executable(${PROJECT_NAME}_demo_joint_traj_to_pp
-  src/demo_joint_traj_to_pp.cpp
+  src/demo/demo_joint_traj_to_pp.cpp
 )
 set_target_properties(${PROJECT_NAME}_demo_joint_traj_to_pp
   PROPERTIES OUTPUT_NAME demo_joint_traj_to_pp PREFIX ""
 )
 target_link_libraries(${PROJECT_NAME}_demo_joint_traj_to_pp
-  ${PROJECT_NAME}_spline
+  ${PROJECT_NAME}_wrapper
   ${catkin_LIBRARIES}
 )
 
 # Demo: Convert Joint Trajectory Waypoints into Time-Optimal Discretized Path
 add_executable(${PROJECT_NAME}_demo_joint_traj_to_optimal
-  src/demo_joint_traj_to_optimal.cpp
+  src/demo/demo_joint_traj_to_optimal.cpp
 )
 set_target_properties(${PROJECT_NAME}_demo_joint_traj_to_optimal
   PROPERTIES OUTPUT_NAME demo_joint_traj_to_optimal PREFIX ""
 )
 target_link_libraries(${PROJECT_NAME}_demo_joint_traj_to_optimal
-  ${PROJECT_NAME}
-  ${PROJECT_NAME}_spline
+  ${PROJECT_NAME}_wrapper
   ${catkin_LIBRARIES}
 )
 
 # Demo: Convert ROS Trajectory Message Waypoints into Time-Optimal Discretized Path
 add_executable(${PROJECT_NAME}_demo_traj_msg_to_optimal
-  src/demo_traj_msg_to_optimal.cpp
+  src/demo/demo_traj_msg_to_optimal.cpp
 )
 set_target_properties(${PROJECT_NAME}_demo_traj_msg_to_optimal
   PROPERTIES OUTPUT_NAME demo_traj_msg_to_optimal PREFIX ""
 )
 target_link_libraries(${PROJECT_NAME}_demo_traj_msg_to_optimal
-  ${PROJECT_NAME}
-  ${PROJECT_NAME}_spline
+  ${PROJECT_NAME}_wrapper
   ${catkin_LIBRARIES}
 )
 
 #############
-## Testing ##
+## testing ##
 #############
 
 ## Test for correct C++ source code
@@ -160,3 +183,8 @@ roslint_cpp()
 #   PATTERN ".svn" EXCLUDE
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
+
+
+# Mark imported library for installation using a workaround since imported
+# targets do not have proper support for installation in CMakeLists
+install(FILES ${foo_LOCATION} DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})

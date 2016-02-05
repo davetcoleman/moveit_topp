@@ -4,22 +4,24 @@ clear
 clc
 format long g
 clf
+hold on
 
 % Settings
-use_moveit_data = true;
-show_pos = 0;
-show_vel = 1;
+use_moveit_data = 1;
+show_pos = 1;
+show_vel = 0;
 show_acc = 0;
+show_optimized = 1;
 
 % ------------------------------------------------------------------------
 % Input trajectory
 if (use_moveit_data)
     num_joints = 7;
-    filename = '/home/dave/ros/current/iiwa_trajectory_data/arm_moveit_trajectory_0.csv';
+    filename = '/home/dave/ros/current/ws_acme/src/moveit_topp/data/moveit_joint_traj.csv';
     moveit_data  = load_moveit_traj(filename, num_joints);
        
     % scale time
-    time_scaling_factor = 15;
+    time_scaling_factor = 1; %0.05;
     moveit_data.timestamp = moveit_data.timestamp / time_scaling_factor;
     
     only_use_one_joint = false;
@@ -42,23 +44,24 @@ end
 
 % ------------------------------------------------------------------------
 % Input PP Fitted Trajectory
-filename2 = '/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv';
+if (show_optimized)
+    filename2 = '/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv';
 
-% read
-traj_data  = load_moveit_traj(filename2, num_joints);
+    % read
+    traj_data  = load_moveit_traj(filename2, num_joints);
 
-% Show fitted
-hold on
-for joint = 1:num_joints
-    title_str = sprintf(' Joint %i',joint);
-    if (show_pos); plot(traj_data.timestamp, traj_data.pos(:,joint), 'DisplayName',strcat('TOPP ',title_str,' Position')); end;
-    if (show_vel); plot(traj_data.timestamp, traj_data.vel(:,joint), 'DisplayName',strcat('TOPP ',title_str,' Velocity')); end;
-    if (show_acc); plot(traj_data.timestamp, traj_data.acc(:,joint), 'DisplayName',strcat('TOPP ',title_str,' Acceleration')); end;
+    % Show fitted
+    for joint = 1:num_joints
+        title_str = sprintf(' Joint %i',joint);
+        if (show_pos); plot(traj_data.timestamp, traj_data.pos(:,joint), 'DisplayName',strcat('TOPP ',title_str,' Position')); end;
+        if (show_vel); plot(traj_data.timestamp, traj_data.vel(:,joint), 'DisplayName',strcat('TOPP ',title_str,' Velocity')); end;
+        if (show_acc); plot(traj_data.timestamp, traj_data.acc(:,joint), 'DisplayName',strcat('TOPP ',title_str,' Acceleration')); end;
+    end
 end
 % ------------------------------------------------------------------------
 
 % Show input
-if (show_pos); plot(in_time, in_pos, 'o-','DisplayName','Input Command'); end;
+if (show_pos); plot(in_time, in_pos, 'o','DisplayName','Input Command'); end;
 
 % Fit to spline
 piecewise_polyn = spline(in_time, in_pos);
@@ -77,7 +80,7 @@ pos = ppval(piecewise_polyn, time);
 % acc = [acc acc(end)]; %TODO this repeats the final velocity value twice
 
 % Plot
-if (show_pos); plot(time, pos, 'DisplayName','Position'); end;
+if (show_pos); plot(time, pos, '--', 'DisplayName','PP Pos'); end;
 %if (show_vel); plot(time, vel,'DisplayName','Velocity'); end;
 %if (show_acc); plot(time, acc,'DisplayName','Acceleration'); end;
 
@@ -91,13 +94,13 @@ set(gca, 'Position', plot_gca)
 
 xlabel('Time')
 ylabel('Radians')
-legend('Location','northwest');
+legend('Location','best');
 figure(1)
 
 % output as trajectory string
 filename = '/home/dave/ros/current/ws_acme/src/moveit_topp/data/matlab_pp_traj.csv';
 fileID = fopen(filename,'w');
 
-polyn_string = find_matrix_spline(in_time, in_pos);
+polyn_string = getPPString(in_time, in_pos);
 
 fprintf(fileID, polyn_string );

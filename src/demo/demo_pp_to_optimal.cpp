@@ -64,6 +64,15 @@ int main(int argc, char** argv)
   TOPP::Trajectory orig_trajectory;
   optimizer.readPPTrajFromFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/matlab_pp_traj.csv", orig_trajectory);
 
+  bool debug = false;
+  if (debug)
+  {
+    // Write joint trajectory to CSV file (for use with Matlab)
+    optimizer.writeTrajectoryToFile("/home/dave/ros/current/ws_acme/src/moveit_topp/data/topp_optimized_traj.csv",
+                                    orig_trajectory);
+    return 0;
+  }
+
   // Time-Optimize with respect to constraints
   TOPP::Trajectory new_trajectory;
   optimizer.optimizeTrajectory(orig_trajectory, new_trajectory);

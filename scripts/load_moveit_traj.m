@@ -6,7 +6,7 @@ function data = load_moveit_traj(filename, num_joints)
     raw = csvread(filename,1,0);
     i=1;
     data.timestamp = raw(:,i);i=i+1;
-    data.timestamp = data.timestamp - data.timestamp(1);
+    %data.timestamp = data.timestamp - data.timestamp(1);
 
     joints = [1:1:num_joints];
 

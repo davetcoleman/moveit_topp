@@ -7,7 +7,7 @@ Features:
  - Converts a kinematic path into piecewise polynomials using spline fitting
  - Spline fitting accomplished using cubic Hermite interpolant by the algorithm CALCCF from Conte and deBoor.
 
-Developed by [Dave Coleman](http://dav.ee/) at the University of Colorado Boulder, using the TOPP library by Quang-Cuong Pham
+Developed by [Dave Coleman](http://dav.ee/) at the University of Colorado Boulder, using the [TOPP library by Quang-Cuong Pham](https://github.com/quangounet/TOPP)
 
 Status:
 
